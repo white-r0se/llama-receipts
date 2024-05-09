@@ -1,0 +1,38 @@
+x-build-arguments: &build-arguments
+  ARTIFACTORY_PROXY_REGISTRY: "docker-proxy.artifactory.tcsbank.ru"
+  PIP_INDEX_URL: "https://registry.tcsbank.ru/repository/pypi-all/simple"
+
+x-dependencies-arguments: &dependencies-arguments
+  image: "adapters/trigger/dependencies"
+  build:
+    context: "."
+    target: "dependencies"
+    args:
+      <<: *build-arguments
+  env_file:
+    - ".env"
+  volumes:
+    - ./:/opt
+
+x-development-arguments: &development-arguments
+  image: "adapters/trigger/development"
+  build:
+    context: "."
+    target: "development"
+    args:
+      <<: *build-arguments
+  env_file:
+    - ".env"
+  volumes:
+    - ./:/opt
+
+services:
+  dependencies:
+    tty: true
+    stdin_open: true
+    <<: *dependencies-arguments
+
+  development:
+    tty: true
+    stdin_open: true
+    <<: *development-arguments
