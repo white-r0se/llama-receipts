@@ -85,9 +85,7 @@ def train(
         f"group_by_length: {group_by_length}\n"
         f"resume_from_checkpoint: {resume_from_checkpoint}\n"
     )
-    assert (
-        base_model
-    ), "Please specify a --base_model"
+    assert base_model, "Please specify a --base_model"
     gradient_accumulation_steps = batch_size // micro_batch_size
 
     device_map = "auto"

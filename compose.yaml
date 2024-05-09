@@ -15,6 +15,13 @@ x-dependencies-arguments: &dependencies-arguments
     - ./:/opt
 
 x-development-arguments: &development-arguments
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 2
+            capabilities: [gpu]
   image: "adapters/trigger/development"
   build:
     context: "."

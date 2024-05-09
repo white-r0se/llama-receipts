@@ -4,17 +4,25 @@ import typer
 
 from src.trainer.train_qlora import train
 
-app = typer.Typer(name="llama-receipts")
+application = typer.Typer(name="llama-receipts")
 
 
-@app.command("train")
-def train(
-    base_model: str = typer.Option(..., "--base-model", exists=True, help="Path to the base model"),
-    data_path: str = typer.Option(..., "--data-path", exists=True, help="Path to the data"),
-    output_dir: str = typer.Option("../models/", "--output-dir", exists=True, help="Path to the output directory"),
+@application.command("train")
+def train_model(
+    base_model: str = typer.Option(
+        ..., "--base-model", exists=True, help="Path to the base model"
+    ),
+    data_path: str = typer.Option(
+        ..., "--data-path", exists=True, help="Path to the data"
+    ),
+    output_dir: str = typer.Option(
+        "../models/", "--output-dir", exists=True, help="Path to the output directory"
+    ),
     # training hyperparams
     batch_size: int = typer.Option(128, "--batch-size", help="Batch size"),
-    micro_batch_size: int = typer.Option(2, "--micro-batch-size", help="Micro batch size"),
+    micro_batch_size: int = typer.Option(
+        2, "--micro-batch-size", help="Micro batch size"
+    ),
     num_epochs: int = typer.Option(1, "--num-epochs", help="Number of epochs"),
     learning_rate: float = typer.Option(2e-5, "--learning-rate", help="Learning rate"),
     cutoff_len: int = typer.Option(1024, "--cutoff-len", help="Cutoff length"),
@@ -29,10 +37,16 @@ def train(
         help="Lora target modules",
     ),
     # llm hyperparams
-    group_by_length: bool = typer.Option(False, "--group-by-length", help="Group by length"),  # faster, but produces an odd training loss curve
-    resume_from_checkpoint: str = typer.Option(None, "--resume-from-checkpoint", help="Resume from checkpoint"),  # either training checkpoint or final adapter
+    group_by_length: bool = typer.Option(
+        False, "--group-by-length", help="Group by length"
+    ),  # faster, but produces an odd training loss curve
+    resume_from_checkpoint: str = typer.Option(
+        None, "--resume-from-checkpoint", help="Resume from checkpoint"
+    ),  # either training checkpoint or final adapter
     use_wandb: bool = typer.Option(True, "--use-wandb", help="Use wandb"),
-    wandb_run_name: Optional[str] = typer.Option(None, "--wandb-run-name", help="Wandb run name"),
+    wandb_run_name: Optional[str] = typer.Option(
+        None, "--wandb-run-name", help="Wandb run name"
+    ),
 ):
     train(
         base_model=base_model,
@@ -55,5 +69,17 @@ def train(
     )
 
 
+@application.callback()
+def dummy_to_force_subcommand() -> None:
+    """
+    This function exists because Typer won't let you force a single subcommand.
+    Since we know we will add other subcommands in the future and don't want to
+    break the interface, we have to use this workaround.
+
+    Delete this when a second subcommand is added.
+    """
+    pass
+
+
 if __name__ == "__main__":
-    app()
+    application()
