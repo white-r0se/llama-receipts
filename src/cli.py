@@ -26,7 +26,9 @@ def train_model(
     num_epochs: int = typer.Option(1, "--num-epochs", help="Number of epochs"),
     learning_rate: float = typer.Option(2e-5, "--learning-rate", help="Learning rate"),
     cutoff_len: int = typer.Option(1024, "--cutoff-len", help="Cutoff length"),
-    val_set_size: int = typer.Option(0, "--val-set-size", help="Validation set size"),
+    val_set_size: float = typer.Option(
+        0.0, "--val-set-size", help="Validation set size"
+    ),
     # lora hyperparams
     lora_r: int = typer.Option(16, "--lora-r", help="Lora r"),
     lora_alpha: int = typer.Option(16, "--lora-alpha", help="Lora alpha"),

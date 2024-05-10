@@ -5,12 +5,12 @@ from typing import List, Optional
 import bitsandbytes as bnb
 import torch
 import transformers
+import wandb
 from datasets import load_dataset, load_from_disk
 from loguru import logger
 from peft import (
     LoraConfig,
     get_peft_model,
-    get_peft_model_state_dict,
     prepare_model_for_int8_training,
     set_peft_model_state_dict,
 )
@@ -19,10 +19,19 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
+    EarlyStoppingCallback,
     Trainer,
+    TrainerCallback,
 )
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+
+from bitsandbytes.cuda_setup.main import CUDASetup
+
+setup = CUDASetup.get_instance()
+
+HUMAN_PROMPT = "Expand abbreviations for products (receipt items), additionally highlight the product, brand and category: "
+ASSISTANT_PROMPT = "Normlized product: "
 
 
 class QLoraTrainer(Trainer):
@@ -33,6 +42,77 @@ class QLoraTrainer(Trainer):
         logger.info("model save path: {}".format(output_dir))
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
         self.model.save_pretrained(output_dir)
+
+
+class CherryPickCallback(TrainerCallback):
+    def __init__(self, tokenizer, num_examples=1):
+        self.tokenizer = tokenizer
+        self.num_examples = num_examples
+
+    def on_evaluate(
+        self,
+        args: transformers.TrainingArguments,
+        state: transformers.TrainerState,
+        control: transformers.TrainerControl,
+        **kwargs,
+    ):
+        model = kwargs["model"]
+        eval_dataloader = kwargs["eval_dataloader"]
+
+        if state.global_step % (args.logging_steps * 5) == 0:
+            # Obtain a few example batches from the evaluation dataloader
+            example_batches = self._get_example_batches(
+                eval_dataloader, num_batches=self.num_examples
+            )
+
+            # Generate predictions for these examples
+            predictions_texts = self._generate_predictions(model, example_batches)
+            # Log the predictions to wandb
+            self._log_to_wandb(example_batches, predictions_texts)
+
+    def _get_example_batches(self, dataloader, num_batches):
+        example_batches = []
+
+        for i, batch in enumerate(dataloader):
+            if i >= num_batches:
+                break
+            example_batches.append(batch)
+
+        return example_batches
+
+    def _generate_predictions(self, model, example_batches):
+        model.eval()  # Make sure the model is in evaluation mode
+        predictions_texts = []
+
+        with torch.no_grad():
+            for batch in example_batches:
+                inputs = batch["input_ids"].to(model.device)
+                attention_mask = (
+                    batch.get("attention_mask").to(model.device)
+                    if "attention_mask" in batch
+                    else None
+                )
+
+                # Generate predictions
+                outputs = model.generate(inputs, attention_mask=attention_mask)
+
+                # Decode the generated text
+                decoded_preds = [
+                    self.tokenizer.decode(output, skip_special_tokens=True)
+                    for output in outputs
+                ]
+                predictions_texts.extend(decoded_preds)
+
+        return predictions_texts
+
+    def _log_to_wandb(self, example_batches, predictions):
+        for batch, prediction in zip(example_batches, predictions):
+            input_text = self.tokenizer.decode(
+                batch["input_ids"][0], skip_special_tokens=True
+            )
+            wandb.log({"example_text": input_text, "prediction": prediction})
+
+            print(f"Input text: {input_text}\nPrediction: {prediction}\n\n")
 
 
 def find_all_linear_names(model):
@@ -57,7 +137,7 @@ def train(
     num_epochs: int,
     learning_rate: float,
     cutoff_len: int,
-    val_set_size: int,
+    val_set_size: float,
     lora_r: int,
     lora_alpha: int,
     lora_dropout: float,
@@ -104,14 +184,18 @@ def train(
         llm_int8_threshold=6.0,
         llm_int8_has_fp16_weight=False,
     )
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model,
-        device_map=device_map,
-        trust_remote_code=True,
-        load_in_4bit=True,
-        torch_dtype=torch.float16,
-        quantization_config=quantization_config,
-    )
+    for _ in range(5):
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model,
+                device_map=device_map,
+                trust_remote_code=True,
+                load_in_4bit=True,
+                torch_dtype=torch.float16,
+                quantization_config=quantization_config,
+            )
+        except:
+            continue
 
     tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
     # # baichuan model without pad token
@@ -125,7 +209,9 @@ def train(
         labels = []
         for cid, conversation in enumerate(conversations):
             human_text = conversation["human"]
+            human_text = HUMAN_PROMPT + human_text
             assistant_text = conversation["assistant"]
+            assistant_text = ASSISTANT_PROMPT + assistant_text
 
             if cid == 0:
                 human_text = tokenizer.bos_token + human_text + tokenizer.eos_token
@@ -248,16 +334,18 @@ def train(
         per_device_train_batch_size=micro_batch_size,
         per_device_eval_batch_size=micro_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        warmup_steps=200,
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.1,
+        # warmup_steps=16,
         num_train_epochs=num_epochs,
         learning_rate=learning_rate,
         fp16=True,
-        logging_steps=50,
+        logging_steps=8,
         optim="adamw_torch",
         evaluation_strategy="steps" if val_set_size > 0 else "no",
         save_strategy="steps",
-        eval_steps=200,
-        save_steps=200,
+        eval_steps=16,
+        save_steps=16,
         output_dir=output_dir,
         save_total_limit=3,
         load_best_model_at_end=True if val_set_size > 0 else False,
@@ -273,6 +361,14 @@ def train(
         eval_dataset=val_data,
         args=train_args,
         data_collator=data_collator,
+        callbacks=[
+            CherryPickCallback(
+                tokenizer=tokenizer,
+            ),
+            EarlyStoppingCallback(
+                early_stopping_patience=5,
+            ),
+        ],
     )
     model.config.use_cache = False
 

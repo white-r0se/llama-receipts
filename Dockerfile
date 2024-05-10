@@ -1,4 +1,4 @@
-FROM python:3.11 as dependencies
+FROM radixai/python-gpu:3.11-cuda11.8 as dependencies
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -41,3 +41,5 @@ FROM dependencies as development
 RUN poetry install \
     && rm -rf ~/.cache/pypoetry \
     && find /opt -type f -name "*.py[co]" -delete -or -type d -name "__pycache__" -delete
+
+COPY src ./src
