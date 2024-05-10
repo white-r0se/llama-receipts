@@ -95,15 +95,38 @@ QLoRA применяет низкоранговое приближение дл�
 
 *Рис 2. Сравнение точности QLoRA с полным finetuning.*
 
+### Реализация
 
+В рамках работы был разработан и реализован Supervised Fine-Tuning (SFT) пайплайн, направленный на обработку и структурирование информации, извлекаемой из чековых данных покупок, с использованием библиотек `transformers` для обучения и `bitsandbytes` для кватизации модели.
+
+С целью подготовки качественного и релевантного обучающего материала, был сгенерирован синтетический датасет нормализованных записей чеков с помощью GPT-4 Turbo. Затем модель обучалась на двух графических процессорах NVIDIA V100 с использованием фреймворка DeepSpeed, что позволило повысить эффективность вычислений и ускорить эксперименты.
+
+В процессе обучения модели был использован подход к регулированию темпа обучения, известный как косинусное затухание (cosine scheduler), который плавно уменьшает скорость обучения на протяжении всего цикла тренировки, имитируя косинусоидальную кривую. Также был установлен коэффициент разогрева (warmup ratio) в размере 0.1, что позволяет модели постепенно адаптироваться к исходному темпу обучения, избегая резких скачков на начальной стадии тренировки и способствует стабилизации процесса. Скорость обучения (learning rate) была установлена на уровне 5e-5, обеспечивая оптимальный баланс между скоростью схождения и качеством обучения.
+
+![eval_loss](images/eval_loss.png)
+
+*Рис 3. График лосса на валидационной выборке*
+
+Примеры генерации модели на валидационной выборке:
+
+| text | answer |
+|---|---|
+| НАП Б/А НЕГАЗ ХОЛ ЗЕЛ ЧАЙ ЛИПТОН | Напиток безалкогольный негазированный Холодный зеленый чай Lipton##Холодный чай##Lipton##Холодный чай |
+| ВИНО ИГР ЛАВЕТТИ КЛАССИКО СЛАД (шт.) | Вино игристое Lavetti Classico сладкое##Вино##Lavetti##Алкоголь |
+| Бахилы п/эт. гладкие синие | Бахилы полиэтиленовые гладкие синие##Бахилы##-##Товары для уборки |
+| НАП ВИН САНТО СТЕФАНО КРАС П\\СЛ 0,75Л | Напиток винный Santo Stefano красное полусладкое 0,75 литра##Вино##Santo Stefano##Алкоголь |
+| БАТАРЕЙКА АЛК MAXIMUM AAA 2 ШТ.ENERGIZER | Батарейка алкалиновая Maximum AAA 2 штуки Energizer##Батарейка##Energizer##Электроника |
+| | |
+
+Можно наблюдать, что модель нормализирует сырые чековые данные, выделяет товар, бренд и категорию продукта.
 
 ## Список литературы
-1. T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al., “Language mod- els are few-shot learners,” Advances in neural information processing systems, vol. 33, pp. 1877–1901, 2020.
+1. T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al., “Language models are few-shot learners,” Advances in neural information processing systems, vol. 33, pp. 1877–1901, 2020.
 2. Y. Zhuang, Y. Yu, K. Wang, H. Sun, and C. Zhang, “Toolqa: A dataset for llm question answering with external tools,” arXiv preprint arXiv:2306.13304, 2023.
-3. W.Zhu,H.Liu,Q.Dong,J.Xu,L.Kong,J.Chen,L.Li,andS.Huang, “Multilingual machine translation with large language models: Empir- ical results and analysis,” arXiv preprint arXiv:2304.04675, 2023.
+3. W.Zhu,H.Liu,Q.Dong,J.Xu,L.Kong,J.Chen,L.Li,andS.Huang, “Multilingual machine translation with large language models: Empirical results and analysis,” arXiv preprint arXiv:2304.04675, 2023.
 4. M. U. Hadi, R. Qureshi, A. Shah, M. Irfan, A. Zafar, M. Shaikh, N. Akhtar, J. Wu, and S. Mirjalili, “A survey on large language models: Applications, challenges, limitations, and practical usage,” TechRxiv, 2023.
 5. B. Xu, X. Liu, H. Shen, Z. Han, Y. Li, M. Yue, Z. Peng, Y. Liu, Z. Yao, and D. Xu, “Gentopia: A collaborative platform for tool-augmented llms,” arXiv preprint arXiv:2308.04030, 2023.
-6. G. Li, H. A. A. K. Hammoud, H. Itani, D. Khizbullin, and B. Ghanem, “Camel: Communicative agents for ”mind” exploration of large lan- guage model society,” in Thirty-seventh Conference on Neural Infor- mation Processing Systems, 2023.
+6. G. Li, H. A. A. K. Hammoud, H. Itani, D. Khizbullin, and B. Ghanem, “Camel: Communicative agents for ”mind” exploration of large language model society,” in Thirty-seventh Conference on Neural Information Processing Systems, 2023.
 7. Q. Wu, G. Bansal, J. Zhang, Y. Wu, S. Zhang, E. Zhu, B. Li, L. Jiang, X. Zhang, and C. Wang, “Autogen: Enabling next-gen llm applications via multi-agent conversation framework,” arXiv preprint arXiv:2308.08155, 2023.
 8. H.Zhang,X.Liu,andJ.Zhang,“Summit:Iterativetextsummarization via chatgpt,” arXiv preprint arXiv:2305.14835, 2023.
 9. Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971, 2023.
