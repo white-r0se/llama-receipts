@@ -2,6 +2,7 @@ from typing import List, Optional
 
 import typer
 
+from src.generation.generate import generate
 from src.trainer.train_qlora import train
 
 application = typer.Typer(name="llama-receipts")
@@ -69,6 +70,25 @@ def train_model(
         use_wandb=use_wandb,
         wandb_run_name=wandb_run_name,
     )
+
+@application.command("generate")
+def generate_model(
+    load_8bit: bool = typer.Option(
+        False, "--load-8bit", help="Load 8bit model"
+    ),
+    base_model: str = typer.Option(
+        ..., "--base-model", help="Path to the base model"
+    ),
+    lora_weights: str = typer.Option(
+        ..., "--lora-weights", exists=True, help="Path to the lora weights"
+    ),
+) -> None:
+    generate(
+        load_8bit=load_8bit,
+        base_model=base_model,
+        lora_weights=lora_weights,
+    )
+
 
 
 @application.callback()
